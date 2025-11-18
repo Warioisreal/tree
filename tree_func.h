@@ -24,6 +24,7 @@ struct Tree_type {
     UpdateFolder(full_folder_name); \
     TreeCtor(&tree_name)
 
+void TreeStart(Tree_type* tree);
 
 tree_return_t TreeCtor(Tree_type* tree);
 tree_return_t TreeDtor(Tree_type* tree);
@@ -37,7 +38,7 @@ void TreeDump(Tree_type* tree, const char* message, tree_return_t error);
 void SubTreeDump(Tree_type* tree, Node_t* node, const char* message, tree_return_t error);
 
 tree_return_t TreeMakeDB(const char* filename, Tree_type* tree);
-tree_return_t TreeReadDB(Tree_type* tree, char* buffer);
+tree_return_t TreeReadDB(const char* filename, Tree_type* tree, char* buffer);
 
 tree_return_t TreeAkinator(Tree_type* tree, FILE* file);
 

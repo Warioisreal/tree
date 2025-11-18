@@ -36,6 +36,76 @@ static void WriteNodeToBuffer(char* buffer, int* position, stack_elem_t is_left_
 static void NodeUpdate(Node_t** node, stack_elem_t is_left_child);
 
 
+void TreeStart(Tree_type* tree) {
+    int cmd = -1;
+    char filename_inp[MAX_ANSWER_SIZE] = "";
+    PRINT_COLOR(CYAN, "Введите название имени файла ввода\n");
+    scanf("%s", filename_inp); CleanInput(stdin);
+
+    FILE* file_inp = fopen(filename_inp, "rb");
+
+    char filename_db[MAX_ANSWER_SIZE] = "";
+
+    char buffer[MAX_BUFFER_DB_SIZE] = "";
+
+    while (cmd != 0) {
+        PRINT_COLOR(CYAN,
+            "\n============MAGIC TREE============\n"
+            "КОМАНДЫ:\n"
+            "0 - выход\n"
+            "1 - добавить элемент\n"
+            "2 - удалить поддерево с вершиной в элементе\n"
+            "3 - вывести дерево в html\n"
+            "4 - прочитать базу данных\n"
+            "5 - записать базу данных\n"
+            "6 - угадать элемент\n"
+            "7 - дать определение элементу\n"
+            "8 - сравнить два элемента\n\n");
+        fscanf(file_inp, "%d", &cmd); CleanInput(file_inp);
+        switch (cmd) {
+            case 0: // exit
+                break;
+            case 1: // add element
+                TreeAddElement(tree, file_inp);
+                break;
+            case 2: // delete element
+                TreeDelElement(tree, file_inp);
+                break;
+            case 3: // print tree
+                TreePrint(tree, "PRINT");
+                break;
+            case 4: // read DB
+                fscanf(file_inp, "%s", filename_db); CleanInput(file_inp);
+
+                TreeReadDB(filename_db, tree, buffer);
+                break;
+            case 5: // make DB
+                fscanf(file_inp, "%s", filename_db); CleanInput(file_inp);
+
+                TreeMakeDB(filename_db, tree);
+                break;
+            case 6: // акинатор
+                TreeAkinator(tree, file_inp);
+                break;
+            case 7: // определение
+                TreeFindElement(tree, file_inp);
+                break;
+            case 8: // сравнение
+                TreeCompareElements(tree, file_inp);
+                break;
+            default:
+                printf("INVALID COMMAND\n");
+        }
+        if (cmd == 0) { break; }
+    }
+    fclose(file_inp);
+
+    TreeDtor(tree);
+    PRINT_COLOR(GREEN, "Завершил работу\n");
+}
+
+//----------------------------------------------------------------------------------
+
 tree_return_t TreeCtor(Tree_type* tree) {
     FILE* file_ = nullptr;
     StartLog(&file_, tree->log->name);
@@ -470,7 +540,11 @@ static tree_return_t TreeGetDB(Tree_type* tree, char* buffer, Node_t* node, int*
 
 //----------------------------------------------------------------------------------
 
-tree_return_t TreeReadDB(Tree_type* tree, char* buffer) {
+tree_return_t TreeReadDB(const char* filename, Tree_type* tree, char* buffer) {
+    FILE* file = fopen(filename, "rb");
+    fread(buffer, sizeof(char), MAX_BUFFER_DB_SIZE, file);
+    fclose(file);
+
     int position = 0;
     tree->size = 0;
     Node_t* node = TreeReadDBRec(tree, buffer, &position);
