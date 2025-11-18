@@ -5,10 +5,10 @@
 
 #include "../tree.h"
 
-typedef Node_t* stack_elem_t;
+typedef int stack_elem_t;
 
-#define ENTER_STACK_ELEMENT(var_ptr) scanf("%zu", var_ptr)
-#define PRINT_STACK_ELEMENT(color, var) PRINT_COLOR_VAR(color, "%zu\n", (size_t)var)
+#define ENTER_STACK_ELEMENT(var_ptr) scanf("%d", var_ptr)
+#define PRINT_STACK_ELEMENT(color, var) PRINT_COLOR_VAR(color, "%d\n", var)
 #define PRINT_STACK_CANARY(color, var) PRINT_COLOR_VAR(color, "0x%X\n", (unsigned int)var)
 
 #ifdef DEBUG
@@ -16,7 +16,7 @@ const size_t STRUCT_CANARY_DEFAULT = 0xbadf00d;
 const stack_elem_t CANARY_DEFAULT  = 0xbadcaca;
 #endif
 
-const stack_elem_t POISON          = 0;
+const stack_elem_t POISON          = -1;
 
 const size_t MAX_STACK_CAPACITY    = 1000000;
 

@@ -42,5 +42,6 @@ tree_return_t TreeReadDB(Tree_type* tree, char* buffer);
 tree_return_t TreeAkinator(Tree_type* tree, FILE* file);
 
 tree_return_t TreeFindElement(Tree_type* tree, FILE* file);
+tree_return_t TreeCompareElements(Tree_type* tree, FILE* file);
 
 #endif //_TREE_FUNC_H_

@@ -30,7 +30,10 @@ static void SkipSpaces(char* buffer, int* position);
 
 static Node_t* TreeFindElementRec(stack_type* stack, Node_t* node, const tree_elem_t value);
 
-static void TreeOutQuestionNode(stack_elem_t node_ptr, char* buffer, int* position);
+static void TreeOutQuestionNode(Node_t* node, char* buffer, int* position);
+
+static void WriteNodeToBuffer(char* buffer, int* position, stack_elem_t is_left_child, Node_t* node1, Node_t* node2);
+static void NodeUpdate(Node_t** node, stack_elem_t is_left_child);
 
 
 tree_return_t TreeCtor(Tree_type* tree) {
@@ -55,7 +58,9 @@ tree_return_t TreeCtor(Tree_type* tree) {
 
     TreePrint(tree, "Ctor");
 
-    MakeGreenElem(tree->root);
+    MakeGreyElem(tree->root);
+
+    tree->root->hash = CalculateNodeHash(tree->root);
 
     return tree_return_t::TREE_OK;
 }
@@ -550,14 +555,7 @@ tree_return_t TreeAkinator(Tree_type* tree, FILE* file) {
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE AKINATE ELEMENT: %s", value);
     TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
 
-    tree_return_t res = TreeAkinatorRec(tree, tree->root, value, file);
-    if (res == tree_return_t::TREE_OK) {
-
-
-        return tree_return_t::TREE_OK;
-    }
-
-    return tree_return_t::TREE_OK;
+    return TreeAkinatorRec(tree, tree->root, value, file);
 }
 
 static tree_return_t TreeAkinatorRec(Tree_type* tree, Node_t* node, const tree_elem_t value, FILE* file) {
@@ -715,8 +713,11 @@ static void SkipSpaces(char* buffer, int* position) {
 //----------------------------------------------------------------------------------
 
 tree_return_t TreeFindElement(Tree_type* tree, FILE* file) {
+    printf("\nЧто будем искать?\n");
+
     char value[MAX_ANSWER_SIZE] = "";
     fscanf(file, "%[^\n]", value);
+    CleanInput(file);
 
     char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
 
@@ -725,31 +726,33 @@ tree_return_t TreeFindElement(Tree_type* tree, FILE* file) {
 
     MAKE_STACK(stack);
 
-    char buffer[MAX_ANSWER_SIZE] = "";
-    const int offset = snprintf(buffer, MAX_ANSWER_SIZE, "say ");
-
-    int position = offset;
-
     if (TreeFindElementRec(&stack, tree->root, value) != nullptr) {
+        char buffer[MAX_ANSWER_SIZE] = "";
+        const int offset = snprintf(buffer, MAX_ANSWER_SIZE, "say ");
+
+        int position = offset;
+
         position += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s - ", value);
 
-        stack_elem_t node_ptr  = nullptr;
-        stack_elem_t prev_node = nullptr;
+        stack_elem_t is_left_child = -1;
 
-        StackPop(&stack, &prev_node);
+        Node_t* node = tree->root;
 
         while (stack.size > 0) {
-            StackPop(&stack, &node_ptr);
-            if (prev_node != nullptr && prev_node->right == node_ptr) {
-                position += snprintf(buffer + position, MAX_ANSWER_SIZE, "не ");
-            }
-            TreeOutQuestionNode(prev_node, buffer, &position);
-            if (node_ptr != nullptr) { position += snprintf(buffer + position, MAX_ANSWER_SIZE, ", а ещё "); }
-            prev_node = node_ptr;
+            StackPop(&stack, &is_left_child);
+
+            if (is_left_child == 0) { position += snprintf(buffer + position, MAX_ANSWER_SIZE, "не "); }
+
+            TreeOutQuestionNode(node, buffer, &position);
+            NodeUpdate(&node, is_left_child);
+
+            if (stack.size > 0) { position += snprintf(buffer + position, MAX_ANSWER_SIZE, ", а ещё "); }
         }
 
         printf("\n%s\n", buffer + offset);
         system(buffer);
+    } else {
+        printf("NOT IN TREE ELEMENT: %s\n", value);
     }
 
     return tree_return_t::TREE_OK;
@@ -757,28 +760,123 @@ tree_return_t TreeFindElement(Tree_type* tree, FILE* file) {
 
 static Node_t* TreeFindElementRec(stack_type* stack, Node_t* node, const tree_elem_t value) {
     if (node->left != nullptr) {
-        if (TreeFindElementRec(stack, node->left, value) != nullptr) {
-            StackPush(stack, node);
-            return node;
+        Node_t* ret1 = TreeFindElementRec(stack, node->left, value);
+        if (ret1 != nullptr) {
+            StackPush(stack, 1);
+            return ret1;
         }
     }
     if (node->right != nullptr) {
-        if (TreeFindElementRec(stack, node->right, value) != nullptr) {
-            StackPush(stack, node);
-            return node;
+        Node_t* ret2 = TreeFindElementRec(stack, node->right, value);
+        if (ret2 != nullptr) {
+            StackPush(stack, 0);
+            return ret2;
         }
     }
-    if (strcmp(node->value, value) == 0) {
-        StackPush(stack, nullptr);
-        return node;
-    }
+    if (strcmp(node->value, value) == 0) { return node; }
     return nullptr;
 }
 
-static void TreeOutQuestionNode(stack_elem_t node_ptr, char* buffer, int* position) {
-    int pos = 0;
-    while (node_ptr->value[pos] != '?') {
-        *position += snprintf(buffer + *position, MAX_ANSWER_SIZE, "%c", node_ptr->value[pos]);
-        pos++;
+static void TreeOutQuestionNode(Node_t* node, char* buffer, int* position) {
+    for (int pos = 0; node->value[pos] != '?'; pos++) {
+        *position += snprintf(buffer + *position, MAX_ANSWER_SIZE, "%c", node->value[pos]);
     }
+}
+
+//----------------------------------------------------------------------------------
+
+tree_return_t TreeCompareElements(Tree_type* tree, FILE* file) {
+    printf("\nЧто будем сравнивать?\n");
+
+    char value1[MAX_ANSWER_SIZE] = "";
+    char value2[MAX_ANSWER_SIZE] = "";
+
+    fscanf(file, "%[^\n]", value1); CleanInput(file);
+    fscanf(file, "%[^\n]", value2); CleanInput(file);
+
+    char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
+
+    snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE COMPARE ELEMENTS: %s | %s", value1, value2);
+    TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
+
+    MAKE_STACK(stack1);
+    MAKE_STACK(stack2);
+
+    Node_t* ret1 = TreeFindElementRec(&stack1, tree->root, value1);
+    Node_t* ret2 = TreeFindElementRec(&stack2, tree->root, value2);
+
+    if (ret1 != nullptr && ret2 != nullptr ) {
+        char buffer[MAX_ANSWER_SIZE]  = "";
+        char buffer1[MAX_ANSWER_SIZE] = "";
+        char buffer2[MAX_ANSWER_SIZE] = "";
+
+        const int offset  = snprintf(buffer,  MAX_ANSWER_SIZE, "say ");
+
+        int position  = offset;
+        int position1 = 0;
+        int position2 = 0;
+
+        if (stack1.data[stack1.size - 1] == stack2.data[stack2.size - 1]) {
+            position  += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s и %s - ", value1, value2);
+            position1 += snprintf(buffer1, MAX_ANSWER_SIZE, ", однако %s - ", value1);
+            position2 += snprintf(buffer2, MAX_ANSWER_SIZE, ", а %s - ", value2);
+        } else {
+            position  += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s и %s не имеют ничего общего", value1, value2);
+            position1 += snprintf(buffer1, MAX_ANSWER_SIZE, ", ведь %s - ", value1);
+            position2 += snprintf(buffer2, MAX_ANSWER_SIZE, ", а %s - ", value2);
+        }
+
+        stack_elem_t is_left_child1 = -1;
+        stack_elem_t is_left_child2 = -1;
+
+        Node_t* node1 = tree->root;
+        Node_t* node2 = tree->root;
+
+        bool equal = true;
+
+        while (stack1.size + stack2.size > 0) {
+            if (stack1.size > 0) { StackPop(&stack1, &is_left_child1); }
+            if (stack2.size > 0) { StackPop(&stack2, &is_left_child2); }
+
+            if (equal == true && is_left_child1 != is_left_child2) {
+                equal = false;
+                node2 = node1;
+            }
+            if (equal == true) {
+                WriteNodeToBuffer(buffer,  &position,  is_left_child1, node1, node2);
+                NodeUpdate(&node1, is_left_child1);
+            } else {
+                WriteNodeToBuffer(buffer1, &position1, is_left_child1, node1, node2);
+                WriteNodeToBuffer(buffer2, &position2, is_left_child2, node2, node1);
+                if (node1 != nullptr && node1->right != nullptr) { NodeUpdate(&node1, is_left_child1); }
+                if (node2 != nullptr && node2->right != nullptr) { NodeUpdate(&node2, is_left_child2); }
+            }
+        }
+        if (ret1 != ret2) { position += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s%s", buffer1, buffer2); }
+
+        printf("\n%s\n", buffer + offset);
+        system(buffer);
+    } else {
+        if (ret1 == nullptr) { printf("NOT IN TREE ELEMENT: %s\n", value1); }
+        if (ret2 == nullptr) { printf("NOT IN TREE ELEMENT: %s\n", value2); }
+    }
+
+    return tree_return_t::TREE_OK;
+}
+
+static void WriteNodeToBuffer(char* buffer, int* position, stack_elem_t is_left_child, Node_t* node1, Node_t* node2) {
+    if (node1 != node2 && node1 != nullptr && node1->right != nullptr) {
+        *position += snprintf(buffer + *position, MAX_ANSWER_SIZE, ", а ещё ");
+    }
+
+    if (is_left_child == 0) { *position += snprintf(buffer + *position, MAX_ANSWER_SIZE, "не "); }
+
+    if (node1 != nullptr && node1->right != nullptr) {
+        TreeOutQuestionNode(node1, buffer, position);
+    }
+}
+
+static void NodeUpdate(Node_t** node, stack_elem_t is_left_child) {
+    if (is_left_child == 1) { *node = (*node)->left; }
+    else {                    *node = (*node)->right; }
 }

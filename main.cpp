@@ -24,6 +24,8 @@ int main (void) {
 
     TreeFindElement(&tree, file_inp);
 
+    TreeCompareElements(&tree, file_inp);
+
     //TreeAddElement(&tree, file_inp);
 
     //TreeDelElement(&tree, file_inp);
