@@ -4,29 +4,18 @@
 
 #include "stack/stack.h"
 #include "color_lib.h"
+#include "audio_lib.h"
 
+#include "sub_func.h"
 #include "tree_func.h"
-#include "tree_verify.h"
+#include "tree_DB.h"
+#include "Akinator.h"
 
 
 static tree_return_t TreeDtorRec(Node_t** node, size_t* size);
 
-static tree_return_t TreeGetDB(Tree_type* tree, char* buffer, Node_t* node, int* position);
-static Node_t* TreeReadDBRec(Tree_type* tree, char* buffer, int* position);
-static tree_elem_t ReadData(char* buffer, int* count, int* position);
-
 static Node_t* TreeAddElementRec(Node_t* node, const tree_elem_t value, FILE* file);
 static Node_t* TreeDelElementRec(Node_t** node, size_t* size, FILE* file);
-
-static Node_t* MakeTreeElement(const tree_elem_t value, bool allocate);
-
-static tree_return_t TreeAkinatorRec(Tree_type* tree, Node_t* node, const tree_elem_t value, FILE* file);
-static tree_return_t AkinatorMakeAction(Tree_type* tree, Node_t* node, Node_t* child_node, const tree_elem_t value, FILE* file);
-static tree_return_t AkinatorPredict(Tree_type* tree, Node_t* node, const tree_elem_t value, FILE* file);
-static tree_return_t AkinatorAdd(Node_t* node, const tree_elem_t value, FILE* file);
-
-static void CleanInput(FILE* file);
-static void SkipSpaces(char* buffer, int* position);
 
 static Node_t* TreeFindElementRec(stack_type* stack, Node_t* node, const tree_elem_t value);
 
@@ -36,7 +25,7 @@ static void WriteNodeToBuffer(char* buffer, int* position, stack_elem_t is_left_
 static void NodeUpdate(Node_t** node, stack_elem_t is_left_child);
 
 
-void TreeStart(Tree_type* tree) {
+void StartWorkWithTree(Tree_type* tree) {
     int cmd = -1;
     char filename_inp[MAX_ANSWER_SIZE] = "";
     PRINT_COLOR(CYAN, "Введите название имени файла ввода\n");
@@ -61,6 +50,7 @@ void TreeStart(Tree_type* tree) {
             "6 - угадать элемент\n"
             "7 - дать определение элементу\n"
             "8 - сравнить два элемента\n\n");
+        VoiceText("Введите команду:");
         fscanf(file_inp, "%d", &cmd); CleanInput(file_inp);
         switch (cmd) {
             case 0: // exit
@@ -76,6 +66,8 @@ void TreeStart(Tree_type* tree) {
                 break;
             case 4: // read DB
                 fscanf(file_inp, "%s", filename_db); CleanInput(file_inp);
+
+                TreeDtorRec(&(tree->root), &(tree->size));
 
                 TreeReadDB(filename_db, tree, buffer);
                 break;
@@ -116,21 +108,19 @@ tree_return_t TreeCtor(Tree_type* tree) {
     tree->log->file_log = file_;
     tree->log->dump_count = 1;
 
-    tree->root = MakeTreeElement("NOTHING", false);
+    tree->root = MakeTreeElement(strdup("NOTHING"), true);
 
     MakeGreenElem(tree->root);
 
-    tree->root->hash = CalculateNodeHash(tree->root);
-
     tree->size = 1;
 
+    #ifdef DEBUG
     TREE_VERIFY_AND_RETURN(tree, tree->root, true, "ERROR IN Ctor");
+    #endif
 
     TreePrint(tree, "Ctor");
 
     MakeGreyElem(tree->root);
-
-    tree->root->hash = CalculateNodeHash(tree->root);
 
     return tree_return_t::TREE_OK;
 }
@@ -138,7 +128,9 @@ tree_return_t TreeCtor(Tree_type* tree) {
 //----------------------------------------------------------------------------------
 
 tree_return_t TreeDtor(Tree_type* tree) {
+    #ifdef DEBUG
     TREE_VERIFY_AND_RETURN(tree, tree->root, false, "ERROR IN Dtor");
+    #endif
 
     TreePrint(tree, "Dtor");
 
@@ -159,7 +151,7 @@ static tree_return_t TreeDtorRec(Node_t** node, size_t* size) {
         TreeDtorRec(&((*node)->right), size);
     }
     if ((*node)->allocated_node == true) {
-        free(const_cast<char*>((*node)->value));
+        free((*node)->value);
     }
     (*node)->value = nullptr;
     free(*node);
@@ -174,10 +166,12 @@ tree_return_t TreeAddElement(Tree_type* tree, FILE* file) {
     char value[MAX_ANSWER_SIZE] = "";
     fscanf(file, "\"%[^\"]", value);
 
+    #ifdef DEBUG
     char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
 
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE ADD ELEMENT: %s", value);
     TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
+    #endif
 
     Node_t* node = TreeAddElementRec(tree->root, value, file);
 
@@ -189,8 +183,10 @@ tree_return_t TreeAddElement(Tree_type* tree, FILE* file) {
     node->correct_childs = !node->correct_childs;
     tree->size++;
 
+    #ifdef DEBUG
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR AFTER ADD ELEMENT: %s", value);
     TREE_VERIFY_AND_RETURN(tree, node, true, error_text);
+    #endif
 
     char message[MAX_DUMP_MESSAGE_SIZE] = "";
     snprintf(message, MAX_DUMP_MESSAGE_SIZE, "Add: %s", value);
@@ -214,7 +210,7 @@ static Node_t* TreeAddElementRec(Node_t* node, const tree_elem_t value, FILE* fi
         return nullptr;
     }
 
-    if (strncmp(answer, "yes", MAX_ANSWER_SIZE) == 0) {
+    if (CompareAnswer(answer) == 1) {
         if (node->left != nullptr) {
             TreeAddElementRec(node->left, value, file);
 
@@ -222,13 +218,12 @@ static Node_t* TreeAddElementRec(Node_t* node, const tree_elem_t value, FILE* fi
         } else {
             node->left = MakeTreeElement(strdup(value), true);
             MakeYellowElem(node);
-            node->hash = CalculateNodeHash(node);
             MakeGreenElem(node->left);
 
             return node;
         }
     } else
-    if (strncmp(answer, "no", MAX_ANSWER_SIZE) == 0) {
+    if (CompareAnswer(answer) == 0) {
         if (node->right != nullptr) {
             TreeAddElementRec(node->right, value, file);
 
@@ -236,7 +231,6 @@ static Node_t* TreeAddElementRec(Node_t* node, const tree_elem_t value, FILE* fi
         } else {
             node->right = MakeTreeElement(strdup(value), true);
             MakeYellowElem(node);
-            node->hash = CalculateNodeHash(node);
             MakeGreenElem(node->right);
 
             return node;
@@ -254,10 +248,12 @@ tree_return_t TreeDelElement(Tree_type* tree, FILE* file) {
     char value[MAX_ANSWER_SIZE] = "";
     fscanf(file, "\"%[^\"]", value);
 
+    #ifdef DEBUG
     char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
 
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE DELETE ELEMENT: %s", value);
     TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
+    #endif
 
     Node_t* node = TreeDelElementRec(&(tree->root), &(tree->size), file);
     if (node == nullptr) {
@@ -267,8 +263,10 @@ tree_return_t TreeDelElement(Tree_type* tree, FILE* file) {
     node->correct_childs = !node->correct_childs;
     MakeYellowElem(node);
 
+    #ifdef DEBUG
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE DELETE ELEMENT: %s", value);
     TREE_VERIFY_AND_RETURN(tree, node, false, error_text);
+    #endif
 
     char message[MAX_DUMP_MESSAGE_SIZE] = "";
     snprintf(message, MAX_DUMP_MESSAGE_SIZE, "Delete: %s", value);
@@ -291,19 +289,19 @@ static Node_t* TreeDelElementRec(Node_t** node, size_t* size, FILE* file) {
         return nullptr;
     }
 
-    if (strncmp(answer, "yes", MAX_ANSWER_SIZE) == 0) {
+    if (CompareAnswer(answer) == 1) {
         TreeDelElementRec(&((*node)->left), size, file);
         (*node)->hash = CalculateNodeHash(*node);
 
         return (*node);
     } else
-    if (strncmp(answer, "no", MAX_ANSWER_SIZE) == 0) {
+    if (CompareAnswer(answer) == 0) {
         TreeDelElementRec(&((*node)->right), size, file);
         (*node)->hash = CalculateNodeHash(*node);
 
         return (*node);
     } else
-    if (strncmp(answer, "delete", MAX_ANSWER_SIZE) == 0){
+    if (CompareAnswer(answer) == -1){
         TreeDtorRec(node, size);
 
         return nullptr;
@@ -458,147 +456,7 @@ void SubTreeDump(Tree_type* tree, Node_t* node, const char* message, tree_return
 
 //----------------------------------------------------------------------------------
 
-tree_return_t TreeMakeDB(const char* filename, Tree_type* tree) {
-    TREE_VERIFY_AND_RETURN(tree, tree->root, true, "ERROR BEFORE MakeDB");
-
-    FILE* file = fopen(filename, "wb");
-
-    if (file == nullptr) {
-        TreeDump(tree, "DB FILE OPEN ERROR", tree_return_t::INVALID_DB_PTR);
-        return tree_return_t::INVALID_DB_PTR;
-    }
-
-    char* buffer = (char*)calloc(MAX_BUFFER_DB_SIZE, sizeof(char));
-
-    if (buffer == nullptr) {
-        TreeDump(tree, "DB BUFFER CALLOC ERROR", tree_return_t::INVALID_BUFFER);
-        return tree_return_t::INVALID_BUFFER;
-    }
-
-    int pos = 0;
-
-    tree_return_t res = TreeGetDB(tree, buffer, tree->root, &pos);
-
-    if (res == tree_return_t::TREE_OK) {
-        fprintf(file, "%s", buffer);
-        TreePrint(tree, "MAKE DB");
-    }
-
-    fclose(file);
-
-    free(buffer);
-    buffer = nullptr;
-
-    return res;
-}
-
-static tree_return_t TreeGetDB(Tree_type* tree, char* buffer, Node_t* node, int* position) {
-    CHECK_ERROR_AND_RETURN(tree, "ERROR IN TreeGetDB", SubTreeVerify(node), tree_return_t::TREE_OK);
-
-    if (buffer == nullptr) {
-        TreeDump(tree, "TreeGetDB INVALID BUFFER", tree_return_t::INVALID_BUFFER);
-        return tree_return_t::INVALID_BUFFER;
-    }
-
-    int res = snprintf(buffer + *position, MAX_BUFFER_DB_SIZE, "(\"%s\" ", node->value);
-
-    if (res == 0) {
-        TreeDump(tree, "DB BUFFER WRITE ERROR", tree_return_t::WRITE_BUF_ERR);
-        return tree_return_t::WRITE_BUF_ERR;
-    }
-    *position += res;
-
-    if (node->left == nullptr) {
-        res = snprintf(buffer + *position, MAX_BUFFER_DB_SIZE, "nil ");
-        if (res == 0) {
-            TreeDump(tree, "DB BUFFER WRITE ERROR", tree_return_t::WRITE_BUF_ERR);
-            return tree_return_t::WRITE_BUF_ERR;
-        }
-        *position += res;
-    } else {
-        TreeGetDB(tree, buffer, node->left, position);
-    }
-    if (node->right == nullptr) {
-        res = snprintf(buffer + *position, MAX_BUFFER_DB_SIZE, "nil");
-        if (res == 0) {
-            TreeDump(tree, "DB BUFFER WRITE ERROR", tree_return_t::WRITE_BUF_ERR);
-            return tree_return_t::WRITE_BUF_ERR;
-        }
-        *position += res;
-    } else {
-        TreeGetDB(tree, buffer, node->right, position);
-    }
-
-    res = snprintf(buffer + *position, MAX_BUFFER_DB_SIZE, ") ");
-    if (res == 0) {
-        TreeDump(tree, "DB BUFFER WRITE ERROR", tree_return_t::WRITE_BUF_ERR);
-        return tree_return_t::WRITE_BUF_ERR;
-    }
-    *position += res;
-    return tree_return_t::TREE_OK;
-}
-
-//----------------------------------------------------------------------------------
-
-tree_return_t TreeReadDB(const char* filename, Tree_type* tree, char* buffer) {
-    FILE* file = fopen(filename, "rb");
-    fread(buffer, sizeof(char), MAX_BUFFER_DB_SIZE, file);
-    fclose(file);
-
-    int position = 0;
-    tree->size = 0;
-    Node_t* node = TreeReadDBRec(tree, buffer, &position);
-    if (node == nullptr) {
-        TreeDump(tree, "DB READ CREATE ROOT ERROR", tree_return_t::INVALID_ROOT);
-        return tree_return_t::INVALID_ROOT;
-    }
-    tree->root = node;
-
-    TREE_VERIFY_AND_RETURN(tree, tree->root, true, "ERROR AFTER ReadDB");
-
-    TreePrint(tree, "DUMP DB TREE");
-
-    return tree_return_t::TREE_OK;
-}
-
-static Node_t* TreeReadDBRec(Tree_type* tree, char* buffer, int* position) {
-    if (buffer[*position] == '(') {
-        Node_t* node = MakeTreeElement("", false);
-        tree->size++;
-        (*position)++; // skip (
-        if(isspace(buffer[*position]) == true) { SkipSpaces(buffer, position); }
-        int count = 0;
-        node->value = ReadData(buffer, &count, position);
-        *position += count - 1;
-        if(isspace(buffer[*position]) == true) { SkipSpaces(buffer, position); }
-        node->left  = TreeReadDBRec(tree, buffer, position);
-        if(isspace(buffer[*position]) == true) { SkipSpaces(buffer, position); }
-        node->right = TreeReadDBRec(tree, buffer, position);
-        if(isspace(buffer[*position]) == true) { SkipSpaces(buffer, position); }
-        (*position)++; // skip )
-        if(isspace(buffer[*position]) == true) { SkipSpaces(buffer, position); }
-
-        node->hash = CalculateNodeHash(node);
-        return node;
-    }
-    if (buffer[*position] == 'n') {
-        *position += 3;
-        return nullptr;
-    }
-    return nullptr;
-}
-
-static tree_elem_t ReadData(char* buffer, int* count, int* position) {
-    sscanf(buffer + *position, "\"%*[^\"]\"%n", count);
-    (*position)++; // skip "
-    *(buffer + *position + *count - 2) = '\0';
-    return buffer + *position;
-
-}
-
-//----------------------------------------------------------------------------------
-
-static Node_t* MakeTreeElement(const tree_elem_t value, bool allocate) {
+Node_t* MakeTreeElement(const tree_elem_t value, bool allocate) {
     Node_t* buf = (Node_t*)calloc(1, sizeof(Node_t));
     if (buf == nullptr) {
         printf("node allocate error\n");
@@ -609,204 +467,36 @@ static Node_t* MakeTreeElement(const tree_elem_t value, bool allocate) {
     buf->left  = nullptr;
     buf->right = nullptr;
     buf->allocated_node = allocate;
-    buf->color    = 0x808080;
-    buf->bg_color = 0xc0c0c0;
-
-    buf->hash = CalculateNodeHash(buf);
+    MakeGreyElem(buf);
 
     return buf;
 }
 
 //----------------------------------------------------------------------------------
 
-tree_return_t TreeAkinator(Tree_type* tree, FILE* file) {
-    printf("Что угадаем сегодня?\n");
-    char value[MAX_ANSWER_SIZE] = "";
-    fscanf(file, "%[^\n]", value);
-
-    char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
-
-    snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE AKINATE ELEMENT: %s", value);
-    TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
-
-    return TreeAkinatorRec(tree, tree->root, value, file);
-}
-
-static tree_return_t TreeAkinatorRec(Tree_type* tree, Node_t* node, const tree_elem_t value, FILE* file) {
-    if (node->left != nullptr || node->right != nullptr) {
-        printf("\nЭто %s\nyes/no\n", node->value);
-
-        char answer_lr[MAX_ANSWER_SIZE] = "";
-        int read_lr = fscanf(file, "%s", answer_lr);
-        if (read_lr == 0) {
-            TreeDump(tree, "ANSWER READ ERROR", tree_return_t::INVALID_ANSWER);
-            return tree_return_t::INVALID_ANSWER;
-        }
-
-        if (strncmp(answer_lr, "yes", MAX_ANSWER_SIZE) == 0) {
-            return AkinatorMakeAction(tree, node, node->left, value, file);
-        } else
-        if (strncmp(answer_lr, "no", MAX_ANSWER_SIZE) == 0) {
-            return AkinatorMakeAction(tree, node, node->right, value, file);
-        } else {
-            TreeDump(tree, "INCORRECT ANSWER IN AKINATOR", tree_return_t::INCORRECT_ANSW);
-            return tree_return_t::INCORRECT_ANSW;
-        }
-    }
-
-    return AkinatorPredict(tree, node, value, file);
-}
-
-static tree_return_t AkinatorMakeAction(Tree_type* tree, Node_t* node, Node_t* child_node, const tree_elem_t value, FILE* file) {
-    char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
-
-    if (child_node != nullptr) {
-        return TreeAkinatorRec(tree, child_node, value, file);
-    } else {
-        printf("Я не знаю, кто это\n");
-
-        child_node = MakeTreeElement(strdup(value), true);
-        MakeGreenElem(child_node);
-        MakeYellowElem(node);
-        node->hash = CalculateNodeHash(node);
-
-        tree->size += 1;
-
-        snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR AFTER AKINATE AND ADD ELEMENT: %s", value);
-        TREE_VERIFY_AND_RETURN(tree, node, true, error_text);
-
-        char message[MAX_DUMP_MESSAGE_SIZE] = "";
-        snprintf(message, MAX_DUMP_MESSAGE_SIZE, "Add: %s", value);
-        TreePrint(tree, message);
-
-        MakeGreyElem(child_node);
-        MakeGreyElem(node);
-        node->hash = CalculateNodeHash(node);
-
-        return tree_return_t::ADD_ELEMENT;
-    }
-}
-
-static tree_return_t AkinatorPredict(Tree_type* tree, Node_t* node, const tree_elem_t value, FILE* file) {
-    char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
-
-    printf("\nЯ думаю это %s\nyes/no\n", node->value);
-
-    char answer_res[MAX_ANSWER_SIZE] = "";
-    int read_res = fscanf(file, "%s", answer_res);
-    if (read_res == 0) {
-        TreeDump(tree, "PREDICT RESULT READ ERROR", tree_return_t::INVALID_ANSWER);
-        return tree_return_t::INVALID_ANSWER;
-    }
-
-    if (strncmp(answer_res, "yes", MAX_ANSWER_SIZE) == 0) {
-        printf("\nХА-ХА, это было легко!\n");
-
-        MakeGreenElem(node);
-        node->hash = CalculateNodeHash(node);
-
-        snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR AFTER AKINATE AND FIND ELEMENT: %s", value);
-        TREE_VERIFY_AND_RETURN(tree, node, true, error_text);
-
-        char message[MAX_DUMP_MESSAGE_SIZE] = "";
-        snprintf(message, MAX_DUMP_MESSAGE_SIZE, "Find: %s", value);
-        TreePrint(tree, message);
-
-        MakeGreyElem(node);
-        node->hash = CalculateNodeHash(node);
-
-        return tree_return_t::TREE_OK;
-    } else
-    if (strncmp(answer_res, "no", MAX_ANSWER_SIZE) == 0) {
-
-        CHECK_ERROR_AND_RETURN(tree, "ERROR in TreeAkinatorPredict", AkinatorAdd(node, value, file), tree_return_t::ADD_ELEMENT);
-
-        tree->size += 2;
-        snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR AFTER AKINATE ELEMENT: %s", value);
-        TREE_VERIFY_AND_RETURN(tree, node, true, error_text);
-
-        char message[MAX_DUMP_MESSAGE_SIZE] = "";
-        snprintf(message, MAX_DUMP_MESSAGE_SIZE, "Add: %s", value);
-        TreePrint(tree, message);
-
-        MakeGreyElem(node);
-        MakeGreyElem(node->left);
-        MakeGreyElem(node->right);
-        node->hash = CalculateNodeHash(node);
-
-        return tree_return_t::ADD_ELEMENT;
-    } else {
-        TreeDump(tree, "INCORRECT ANSWER IN AKINATOR", tree_return_t::INCORRECT_ANSW);
-        return tree_return_t::INCORRECT_ANSW;
-    }
-}
-
-static tree_return_t AkinatorAdd(Node_t* node, const tree_elem_t value, FILE* file) {
-    printf(
-        "\nЯ не знаю, кто это\n"
-        "\nЗапишите вопрос, продолжив фразу:\n"
-        "Чем %s отличается от %s?\n"
-        "Он ...\n", value, node->value);
-    char answer_qst[MAX_ANSWER_SIZE] = "";
-    CleanInput(file);
-    int read_qst = fscanf(file, "%[^\n]", answer_qst);
-    CleanInput(file);
-    if (read_qst == 0) { return tree_return_t::INVALID_ANSWER; }
-
-    node->right = MakeTreeElement(node->value, node->allocated_node);
-    node->left  = MakeTreeElement(strdup(value), true);
-
-    node->value = strdup(answer_qst);
-    node->allocated_node = true;
-
-    MakeYellowElem(node->right);
-    MakeGreenElem(node->left);
-    MakeGreenElem(node);
-
-    node->hash = CalculateNodeHash(node);
-
-    return tree_return_t::ADD_ELEMENT;
-}
-
-//----------------------------------------------------------------------------------
-
-static void CleanInput(FILE* file) {
-    while (fgetc(file) != '\n') {
-        continue;
-    }
-}
-
-//----------------------------------------------------------------------------------
-
-static void SkipSpaces(char* buffer, int* position) {
-    while (isspace(buffer[*position]) == true) {
-        (*position)++;
-    }
-}
-
-//----------------------------------------------------------------------------------
-
 tree_return_t TreeFindElement(Tree_type* tree, FILE* file) {
     printf("\nЧто будем искать?\n");
+    VoiceText("Что хотите найти?");
 
     char value[MAX_ANSWER_SIZE] = "";
     fscanf(file, "%[^\n]", value);
     CleanInput(file);
 
+    #ifdef DEBUG
     char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
 
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE FINDING ELEMENT: %s", value);
     TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
+    #endif
 
     MAKE_STACK(stack);
 
     if (TreeFindElementRec(&stack, tree->root, value) != nullptr) {
         char buffer[MAX_ANSWER_SIZE] = "";
-        const int offset = snprintf(buffer, MAX_ANSWER_SIZE, "say ");
 
-        int position = offset;
+        int position = 0;
 
-        position += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s - ", value);
+        position += snprintf(buffer, MAX_ANSWER_SIZE, "%s - ", value);
 
         stack_elem_t is_left_child = -1;
 
@@ -823,11 +513,13 @@ tree_return_t TreeFindElement(Tree_type* tree, FILE* file) {
             if (stack.size > 0) { position += snprintf(buffer + position, MAX_ANSWER_SIZE, ", а ещё "); }
         }
 
-        printf("\n%s\n", buffer + offset);
-        system(buffer);
+        printf("\n%s\n", buffer);
+        VoiceText(buffer);
     } else {
         printf("NOT IN TREE ELEMENT: %s\n", value);
     }
+
+    StackDtor(&stack);
 
     return tree_return_t::TREE_OK;
 }
@@ -861,6 +553,7 @@ static void TreeOutQuestionNode(Node_t* node, char* buffer, int* position) {
 
 tree_return_t TreeCompareElements(Tree_type* tree, FILE* file) {
     printf("\nЧто будем сравнивать?\n");
+    VoiceText("Что хотите сравнить?");
 
     char value1[MAX_ANSWER_SIZE] = "";
     char value2[MAX_ANSWER_SIZE] = "";
@@ -868,10 +561,12 @@ tree_return_t TreeCompareElements(Tree_type* tree, FILE* file) {
     fscanf(file, "%[^\n]", value1); CleanInput(file);
     fscanf(file, "%[^\n]", value2); CleanInput(file);
 
+    #ifdef DEBUG
     char error_text[MAX_DUMP_MESSAGE_SIZE] = "";
 
     snprintf(error_text, MAX_DUMP_MESSAGE_SIZE, "ERROR BEFORE COMPARE ELEMENTS: %s | %s", value1, value2);
     TREE_VERIFY_AND_RETURN(tree, tree->root, true, error_text);
+    #endif
 
     MAKE_STACK(stack1);
     MAKE_STACK(stack2);
@@ -884,18 +579,16 @@ tree_return_t TreeCompareElements(Tree_type* tree, FILE* file) {
         char buffer1[MAX_ANSWER_SIZE] = "";
         char buffer2[MAX_ANSWER_SIZE] = "";
 
-        const int offset  = snprintf(buffer,  MAX_ANSWER_SIZE, "say ");
-
-        int position  = offset;
+        int position  = 0;
         int position1 = 0;
         int position2 = 0;
 
         if (stack1.data[stack1.size - 1] == stack2.data[stack2.size - 1]) {
-            position  += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s и %s - ", value1, value2);
+            position  += snprintf(buffer,  MAX_ANSWER_SIZE, "%s и %s - ", value1, value2);
             position1 += snprintf(buffer1, MAX_ANSWER_SIZE, ", однако %s - ", value1);
             position2 += snprintf(buffer2, MAX_ANSWER_SIZE, ", а %s - ", value2);
         } else {
-            position  += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s и %s не имеют ничего общего", value1, value2);
+            position  += snprintf(buffer,  MAX_ANSWER_SIZE, "%s и %s не имеют ничего общего", value1, value2);
             position1 += snprintf(buffer1, MAX_ANSWER_SIZE, ", ведь %s - ", value1);
             position2 += snprintf(buffer2, MAX_ANSWER_SIZE, ", а %s - ", value2);
         }
@@ -928,12 +621,15 @@ tree_return_t TreeCompareElements(Tree_type* tree, FILE* file) {
         }
         if (ret1 != ret2) { position += snprintf(buffer + position, MAX_ANSWER_SIZE, "%s%s", buffer1, buffer2); }
 
-        printf("\n%s\n", buffer + offset);
-        system(buffer);
+        printf("\n%s\n", buffer);
+        VoiceText(buffer);
     } else {
         if (ret1 == nullptr) { printf("NOT IN TREE ELEMENT: %s\n", value1); }
         if (ret2 == nullptr) { printf("NOT IN TREE ELEMENT: %s\n", value2); }
     }
+
+    StackDtor(&stack1);
+    StackDtor(&stack2);
 
     return tree_return_t::TREE_OK;
 }

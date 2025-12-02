@@ -13,7 +13,6 @@ static inline void StackFillPoison(stack_type* stack);
 
 
 stack_error_t StackCtor(stack_type* stack, const size_t capacity) {
-
     CHECK_CAPACITY_AND_RETURN(stack, capacity);
 
     #ifdef DEBUG
@@ -69,10 +68,11 @@ stack_error_t StackPush(stack_type* stack, const stack_elem_t value) {
     STACK_VERIFY_AND_RETURN(stack, "error before push");
 
     if (stack->size + 1 == stack->capacity) {
+        PRINT_COLOR_VAR(MAGENTA, "old: %p\n", stack->data);
         StackEditCapacity(stack, stack->capacity * 2);
+        PRINT_COLOR_VAR(YELLOW, "new: %p\n", stack->data);
     }
     stack->data[stack->size++] = value;
-
     #ifdef DEBUG
     stack->data_hash   = CalculateDataHash(stack);
     stack->struct_hash = CalculateStructHash(stack);

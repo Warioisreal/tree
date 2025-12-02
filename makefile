@@ -12,17 +12,20 @@ CFLAGS = -D _DEBUG -ggdb3 -std=c++17 -O0 -Wall -Wextra -Weffc++ -Wc++14-compat -
 LDFLAGS =
 OBJDIR = objects
 CC = g++
-SOURCES = main.cpp tree_func.cpp logger.cpp dot.cpp tree_verify.cpp
+SOURCES = main.cpp tree_func.cpp logger.cpp dot.cpp tree_verify.cpp tree_DB.cpp Akinator.cpp sub_func.cpp audio_lib.cpp
 OBJECTS = $(addprefix $(OBJDIR)/, $(SOURCES:.cpp=.o))
 EXECUTABLE = binary_file
 
 STACK_SRC_DIR = stack
 STACK_OBJDIR = stack_obj
-STACK_SOURCES = stack_func.cpp defender_system.cpp stack_attack.cpp
+STACK_SOURCES = stack_func.cpp defender_system.cpp
 STACK_OBJECTS = $(addprefix $(STACK_OBJDIR)/, $(STACK_SOURCES:.cpp=.o))
 STACK_LIB = stack_lib.a
 
 all: stack $(EXECUTABLE)
+
+debug: CFLAGS += -DDEBUG
+debug: all
 
 stack: $(STACK_LIB)
 
@@ -31,7 +34,7 @@ $(STACK_LIB): $(STACK_OBJECTS)
 
 $(STACK_OBJDIR)/%.o: $(STACK_SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c -g $< -o $@
 
 $(EXECUTABLE): $(OBJECTS) $(STACK_LIB)
 	$(CC) $(LDFLAGS) $(OBJECTS) $(STACK_LIB) -o $@

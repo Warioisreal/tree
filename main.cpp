@@ -11,7 +11,7 @@ int main (void) {
 
     MAKE_TREE(tree);
 
-    TreeStart(&tree);
+    StartWorkWithTree(&tree);
 
     return 0;
 }

@@ -17,6 +17,8 @@ static const size_t COMMAND_SIZE = 100;
 
 static const size_t LOG_MESSAGE_SIZE = 100;
 
+static const size_t CHILD_TEXT_PTR_SIZE = 10;
+
 
 struct LOG {
     FILE* file_log    = nullptr;
@@ -30,10 +32,5 @@ void UpdateFolder(const char* name_folder);
 void StartLog(FILE** file, const char* list_name);
 void FinishLog(FILE** file);
 void GoLog(Node_t* root, size_t size, Node_t* node, const char* message, LOG* log);
-
-void MakeGreenElem(Node_t* node);
-void MakeYellowElem(Node_t* node);
-void MakeRedElem(Node_t* node);
-void MakeGreyElem(Node_t* node);
 
 #endif //_LOGGER_H_

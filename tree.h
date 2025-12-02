@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-typedef const char* tree_elem_t;
+typedef char* tree_elem_t;
 
 const tree_elem_t DATA_POISON = nullptr;
 
@@ -13,7 +13,7 @@ const size_t MAX_BUFFER_DB_SIZE = 10000;
 
 const size_t MAX_DUMP_MESSAGE_SIZE = 200;
 
-const size_t HASH_SEED = 5381;
+const size_t TREE_HASH_SEED = 5381;
 
 struct Node_t {
     tree_elem_t value = DATA_POISON;

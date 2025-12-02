@@ -100,17 +100,17 @@ void GoLog(Node_t* root, size_t size, Node_t* node, const char* message, LOG* lo
 
 static void GoLogRec(Node_t* node, FILE* file_dot) {
     char params[DOT_PARAMS_SIZE] = "";
-    char left[10] = "";
-    char right[10] = "";
+    char left[CHILD_TEXT_PTR_SIZE] = "";
+    char right[CHILD_TEXT_PTR_SIZE] = "";
     if (node->left != nullptr) {
-        snprintf(left, 10, "Да");
+        snprintf(left, CHILD_TEXT_PTR_SIZE, "Да");
     } else {
-        snprintf(left, 10, "0");
+        snprintf(left, CHILD_TEXT_PTR_SIZE, "0");
     }
     if (node->right != nullptr) {
-        snprintf(right, 10, "Нет");
+        snprintf(right, CHILD_TEXT_PTR_SIZE, "Нет");
     } else {
-        snprintf(right, 10, "0");
+        snprintf(right, CHILD_TEXT_PTR_SIZE, "0");
     }
     snprintf(
         params,
@@ -132,34 +132,4 @@ static void GoLogRec(Node_t* node, FILE* file_dot) {
         MakeDotElementConnection(file_dot, (size_t)node, (size_t)node->right, ": <right>", "", "color=\"#0000ff\"");
         GoLogRec(node->right, file_dot);
     }
-}
-
-//----------------------------------------------------------------------------------
-
-void MakeGreenElem(Node_t* node) {
-    node->color    = 0x00c000;
-    node->bg_color = 0xa0f0a0;
-}
-
-//----------------------------------------------------------------------------------
-
-void MakeYellowElem(Node_t* node) {
-    node->color    = 0xc0c000;
-    node->bg_color = 0xf0f0a0;
-}
-
-//----------------------------------------------------------------------------------
-
-void MakeRedElem(Node_t* node) {
-    if (node == nullptr) {printf("NULL\n"); return; }
-    node->color    = 0xc00000;
-    node->bg_color = 0xf0a0a0;
-}
-
-//----------------------------------------------------------------------------------
-
-void MakeGreyElem(Node_t* node) {
-    if (node == nullptr) {printf("NULL\n"); return; }
-    node->color    = 0x808080;
-    node->bg_color = 0xc0c0c0;
 }

@@ -1,7 +1,7 @@
 #include "tree_verify.h"
+#include "sub_func.h"
 
 
-static size_t djb2(size_t hash, size_t field);
 static void TreeVisitPostOrder(Node_t* node, size_t* count);
 
 tree_return_t TreeVerify(Tree_type* tree, bool check_size) {
@@ -44,24 +44,6 @@ tree_return_t SubTreeVerify(Node_t* node) {
 
 //----------------------------------------------------------------------------------
 
-size_t CalculateNodeHash(Node_t* node) {
-    if (node == nullptr) { return 0; }
-
-    size_t struct_hash = HASH_SEED;
-
-    struct_hash = djb2(struct_hash, (size_t)node->value);
-    struct_hash = djb2(struct_hash, (size_t)node->left);
-    struct_hash = djb2(struct_hash, (size_t)node->right);
-    struct_hash = djb2(struct_hash, (size_t)node->allocated_node);
-    struct_hash = djb2(struct_hash, (size_t)node->correct_childs);
-    struct_hash = djb2(struct_hash, (size_t)node->color);
-    struct_hash = djb2(struct_hash, (size_t)node->bg_color);
-
-    return struct_hash;
-}
-
-//----------------------------------------------------------------------------------
-
 static void TreeVisitPostOrder(Node_t* node, size_t* count) {
     if (node->left != nullptr) {
         TreeVisitPostOrder(node->left, count);
@@ -71,10 +53,3 @@ static void TreeVisitPostOrder(Node_t* node, size_t* count) {
     }
     (*count)++;
 }
-
-//----------------------------------------------------------------------------------
-
-static size_t djb2(size_t hash, size_t field) {
-    return ((hash << 5) + hash) + field;
-}
-
